@@ -152,7 +152,7 @@ struct BubbleView: View {
     var fillRatio: CGFloat { info.pressure / 100 }
 
     var body: some View {
-        let s: CGFloat = 42
+        let s: CGFloat = 28
 
         ZStack {
             // 1. Deep pearl body — dark core with radial depth
@@ -177,9 +177,9 @@ struct BubbleView: View {
                     LinearGradient(
                         colors: [
                             pressureColor.opacity(0.0),
-                            pressureColor.opacity(0.15),
-                            pressureColor.opacity(0.35),
-                            pressureColor.opacity(0.5)
+                            pressureColor.opacity(0.20),
+                            pressureColor.opacity(0.45),
+                            pressureColor.opacity(0.6)
                         ],
                         startPoint: UnitPoint(x: 0.5, y: 1.0 - fillRatio),
                         endPoint: .bottom
@@ -192,8 +192,8 @@ struct BubbleView: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            pressureColor.opacity(0.3),
-                            pressureColor.opacity(0.08),
+                            pressureColor.opacity(0.4),
+                            pressureColor.opacity(0.12),
                             .clear
                         ],
                         center: .center,
@@ -310,17 +310,15 @@ struct BubbleView: View {
 
             // 10. Text content
             VStack(spacing: 0) {
-                Text(formatBytes(info.used))
-                    .font(.system(size: 7, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
                 Text(String(format: "%.0f%%", info.pressure))
-                    .font(.system(size: 6.5, weight: .semibold, design: .rounded))
+                    .font(.system(size: 6, weight: .bold, design: .rounded))
+                    .foregroundStyle(pressureColor)
                     .foregroundStyle(pressureColor)
             }
             .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
         }
         .clipShape(Circle())
-        .opacity(0.85)
+        .opacity(0.9)
         .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
     }
 }
