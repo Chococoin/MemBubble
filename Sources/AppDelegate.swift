@@ -1,0 +1,286 @@
+import Cocoa
+import SwiftUI
+import ServiceManagement
+
+// MARK: - Custom Hosting View for Right-Click
+
+class RightClickHostingView<Content: View>: NSHostingView<Content> {
+    var onRightClick: ((NSEvent) -> Void)?
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?(event)
+    }
+}
+
+// MARK: - App Delegate
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var window: NSWindow!
+    var settingsWindow: NSWindow?
+    var thresholdsWindow: NSWindow?
+
+    let memoryReader = MemoryReader()
+    let cpuReader = CPUReader()
+    let pressureHistory = PressureHistory()
+    let settings = SettingsManager.shared
+    var menuBarController: MenuBarController!
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Hide dock icon
+        NSApp.setActivationPolicy(.accessory)
+
+        // Request notification permission
+        NotificationManager.shared.requestPermission()
+
+        // Setup menu bar
+        menuBarController = MenuBarController(memoryReader: memoryReader, cpuReader: cpuReader)
+        menuBarController.onToggleBubble = { [weak self] in
+            self?.toggleBubbleVisibility()
+        }
+        menuBarController.onShowSettings = { [weak self] in
+            self?.showSettings()
+        }
+        menuBarController.onCalibrate = { [weak self] in
+            self?.memoryReader.calibrate()
+        }
+        menuBarController.onRefresh = { [weak self] in
+            self?.memoryReader.refresh()
+            self?.cpuReader.refresh()
+        }
+
+        // Create main bubble window
+        let contentView = ContentView(
+            memoryReader: memoryReader,
+            cpuReader: cpuReader,
+            pressureHistory: pressureHistory,
+            settings: settings
+        )
+
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 80, height: 80),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        let hostingView = RightClickHostingView(rootView: contentView)
+        hostingView.onRightClick = { [weak self] event in
+            guard let self = self else { return }
+            NSMenu.popUpContextMenu(self.contextMenu, with: event, for: hostingView)
+        }
+        window.contentView = hostingView
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .floating
+        window.hasShadow = false
+        window.isMovableByWindowBackground = true
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+
+        // Restore saved position or default to top-right
+        if let savedPosition = settings.loadWindowPosition() {
+            window.setFrameOrigin(savedPosition)
+        } else if let screen = NSScreen.main {
+            let screenFrame = screen.visibleFrame
+            let x = screenFrame.maxX - 90
+            let y = screenFrame.maxY - 90
+            window.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        // Auto-resize window based on content
+        window.contentView?.setFrameSize(window.contentView?.fittingSize ?? NSSize(width: 80, height: 80))
+
+        // Observe content size changes
+        NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification,
+            object: window.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self, let contentView = self.window.contentView else { return }
+            let newSize = contentView.fittingSize
+            let currentOrigin = self.window.frame.origin
+            self.window.setFrame(
+                NSRect(origin: currentOrigin, size: newSize),
+                display: true,
+                animate: true
+            )
+        }
+
+        // Observe window move to persist position
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            self.settings.saveWindowPosition(self.window.frame.origin)
+        }
+
+        // Timer to record pressure history, send notifications, update menu bar
+        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.pressureHistory.record(self.memoryReader.info.pressure)
+            NotificationManager.shared.checkPressureAndNotify(self.memoryReader.info.pressure)
+            self.menuBarController.update()
+
+            // Write shared data for widget
+            SharedData.write(
+                pressure: self.memoryReader.info.pressure,
+                cpuUsage: self.cpuReader.info.totalUsage,
+                usedMemory: self.memoryReader.info.used,
+                totalMemory: self.memoryReader.info.total
+            )
+        }
+
+        window.orderFrontRegardless()
+    }
+
+    private func toggleBubbleVisibility() {
+        if window.isVisible {
+            window.orderOut(nil)
+        } else {
+            window.orderFrontRegardless()
+        }
+    }
+
+    // MARK: - Context Menu
+
+    lazy var contextMenu: NSMenu = {
+        let menu = NSMenu()
+
+        menu.addItem(NSMenuItem(title: "Refresh", action: #selector(refreshMemory), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Calibrate (Set Zero)", action: #selector(calibrateBaseline), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+
+        // Display mode submenu
+        let displayMenu = NSMenu()
+        let memItem = NSMenuItem(title: "Memory Only", action: #selector(setDisplayMemory), keyEquivalent: "")
+        let cpuItem = NSMenuItem(title: "CPU Only", action: #selector(setDisplayCPU), keyEquivalent: "")
+        let bothItem = NSMenuItem(title: "Memory + CPU", action: #selector(setDisplayBoth), keyEquivalent: "")
+        displayMenu.addItem(memItem)
+        displayMenu.addItem(cpuItem)
+        displayMenu.addItem(bothItem)
+        let displaySubmenu = NSMenuItem(title: "Display Mode", action: nil, keyEquivalent: "")
+        displaySubmenu.submenu = displayMenu
+        menu.addItem(displaySubmenu)
+
+        // Sort submenu
+        let sortMenu = NSMenu()
+        sortMenu.addItem(NSMenuItem(title: "By Memory", action: #selector(setSortMemory), keyEquivalent: ""))
+        sortMenu.addItem(NSMenuItem(title: "By Name", action: #selector(setSortName), keyEquivalent: ""))
+        let sortSubmenu = NSMenuItem(title: "Sort Processes", action: nil, keyEquivalent: "")
+        sortSubmenu.submenu = sortMenu
+        menu.addItem(sortSubmenu)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Notification toggle
+        let muteItem = NSMenuItem(title: "Mute Notifications", action: #selector(toggleMuteNotifications), keyEquivalent: "")
+        muteItem.state = settings.notificationsMuted ? .on : .off
+        menu.addItem(muteItem)
+
+        // Alert sound toggle
+        let soundItem = NSMenuItem(title: "Alert Sound", action: #selector(toggleAlertSound), keyEquivalent: "")
+        soundItem.state = settings.alertSoundEnabled ? .on : .off
+        menu.addItem(soundItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Launch at Login
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.state = UserDefaults.standard.bool(forKey: SettingsKey.launchAtLogin) ? .on : .off
+        menu.addItem(loginItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        menu.addItem(NSMenuItem(title: "Thresholds...", action: #selector(showThresholds), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit MemBubble", action: #selector(quitApp), keyEquivalent: ""))
+
+        return menu
+    }()
+
+    @objc func refreshMemory() {
+        memoryReader.refresh()
+        cpuReader.refresh()
+    }
+
+    @objc func calibrateBaseline() {
+        memoryReader.calibrate()
+    }
+
+    @objc func setDisplayMemory() { settings.displayMode = .memoryOnly }
+    @objc func setDisplayCPU() { settings.displayMode = .cpuOnly }
+    @objc func setDisplayBoth() { settings.displayMode = .both }
+
+    @objc func setSortMemory() { settings.processSortMode = .byMemory }
+    @objc func setSortName() { settings.processSortMode = .byName }
+
+    @objc func toggleMuteNotifications() {
+        settings.notificationsMuted.toggle()
+    }
+
+    @objc func toggleAlertSound() {
+        settings.alertSoundEnabled.toggle()
+    }
+
+    @objc func toggleLaunchAtLogin() {
+        let current = UserDefaults.standard.bool(forKey: SettingsKey.launchAtLogin)
+        let newValue = !current
+        UserDefaults.standard.set(newValue, forKey: SettingsKey.launchAtLogin)
+
+        if #available(macOS 13.0, *) {
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                // Requires .app bundle to work
+            }
+        }
+    }
+
+    @objc func showThresholds() {
+        if thresholdsWindow == nil {
+            let view = ThresholdSettingsView(settings: settings)
+            let hostingController = NSHostingController(rootView: view)
+            let panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
+                styleMask: [.titled, .closable, .hudWindow, .utilityWindow],
+                backing: .buffered,
+                defer: false
+            )
+            panel.contentViewController = hostingController
+            panel.title = "Thresholds"
+            panel.center()
+            panel.isFloatingPanel = true
+            thresholdsWindow = panel
+        }
+        thresholdsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc func showSettings() {
+        if settingsWindow == nil {
+            let view = SettingsView(settings: settings)
+            let hostingController = NSHostingController(rootView: view)
+            let win = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            win.contentViewController = hostingController
+            win.title = "MemBubble Settings"
+            win.center()
+            settingsWindow = win
+        }
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func quitApp() {
+        NSApplication.shared.terminate(nil)
+    }
+}
