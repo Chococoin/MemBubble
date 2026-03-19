@@ -15,6 +15,9 @@ struct MemoryInfo {
     var appMemory: UInt64 = 0
     var pressure: Double = 0
     var swapUsed: UInt64 = 0
+    var swapTotal: UInt64 = 0
+    var kernelPressureLevel: Int = 0   // 0=normal, 1=warn, 2=critical, 4=urgent
+    var compressedRatio: Double = 0    // compressed / total
 }
 
 struct ProcessMemInfo: Identifiable {
@@ -31,16 +34,67 @@ class MemoryReader: ObservableObject {
     @Published var topProcesses: [ProcessMemInfo] = []
 
     private var timer: Timer?
+    private var baselineUsed: UInt64 = 0
 
     init() {
-        refresh()
+        // Capture raw memory first to establish baseline
+        info = readSystemMemory()
+        baselineUsed = info.used
+        // Recalculate pressure relative to baseline (will be 0%)
+        info.pressure = 0
+        topProcesses = readTopProcesses(limit: 12)
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.refresh()
         }
     }
 
+    func calibrate() {
+        let raw = readSystemMemory()
+        baselineUsed = raw.used
+        refresh()
+    }
+
     func refresh() {
         info = readSystemMemory()
+
+        // 1. RAM pressure relative to baseline
+        let available = info.total - baselineUsed
+        var ramPressure: Double = 0
+        if info.used > baselineUsed && available > 0 {
+            let delta = info.used - baselineUsed
+            ramPressure = min(Double(delta) / Double(available) * 100, 100)
+        }
+
+        // 2. Swap boost — swap usage as % of total RAM adds urgency
+        let swapBoost: Double
+        if info.total > 0 && info.swapUsed > 0 {
+            let swapRatio = Double(info.swapUsed) / Double(info.total) * 100
+            // 1 GB swap on 16 GB = ~6% boost, scales up fast
+            swapBoost = min(swapRatio * 2, 40)
+        } else {
+            swapBoost = 0
+        }
+
+        // 3. Kernel pressure level boost — the OS itself is alarming
+        let kernelBoost: Double
+        switch info.kernelPressureLevel {
+        case 1: kernelBoost = 15   // warn
+        case 2: kernelBoost = 30   // critical
+        case 4: kernelBoost = 50   // urgent
+        default: kernelBoost = 0   // normal
+        }
+
+        // 4. Compressed ratio boost — high compression = CPU strain
+        let compressBoost: Double
+        if info.compressedRatio > 0.25 {
+            compressBoost = (info.compressedRatio - 0.25) * 60  // 25%→0, 50%→15
+        } else {
+            compressBoost = 0
+        }
+
+        // Composite: RAM is base, signals boost the severity
+        info.pressure = min(ramPressure + swapBoost + kernelBoost + compressBoost, 100)
+
         topProcesses = readTopProcesses(limit: 12)
     }
 
@@ -81,11 +135,21 @@ class MemoryReader: ObservableObject {
         var swapSize = MemoryLayout<xsw_usage>.size
         sysctlbyname("vm.swapusage", &swapUsage, &swapSize, nil, 0)
         info.swapUsed = swapUsage.xsu_used
+        info.swapTotal = swapUsage.xsu_total
 
-        // Pressure as percentage
-        let usable = info.total
-        let pressureBytes = info.used
-        info.pressure = min(Double(pressureBytes) / Double(usable) * 100, 100)
+        // Kernel memory pressure level (0=normal, 1=warn, 2=critical, 4=urgent)
+        var pressureLevel: Int32 = 0
+        var plSize = MemoryLayout<Int32>.size
+        sysctlbyname("kern.memorystatus_vm_pressure_level", &pressureLevel, &plSize, nil, 0)
+        info.kernelPressureLevel = Int(pressureLevel)
+
+        // Compressed ratio
+        if info.total > 0 {
+            info.compressedRatio = Double(info.compressed) / Double(info.total)
+        }
+
+        // Raw pressure (will be recalculated relative to baseline in refresh())
+        info.pressure = min(Double(info.used) / Double(info.total) * 100, 100)
 
         return info
     }
@@ -142,9 +206,9 @@ struct BubbleView: View {
     let info: MemoryInfo
 
     var pressureColor: Color {
-        if info.pressure < 75 { return .green }
-        if info.pressure < 85 { return .yellow }
-        if info.pressure < 93 { return .orange }
+        if info.pressure < 50 { return .green }
+        if info.pressure < 70 { return .yellow }
+        if info.pressure < 85 { return .orange }
         return .red
     }
 
@@ -331,9 +395,9 @@ struct DetailView: View {
     let onClose: () -> Void
 
     var pressureColor: Color {
-        if info.pressure < 75 { return .green }
-        if info.pressure < 85 { return .yellow }
-        if info.pressure < 93 { return .orange }
+        if info.pressure < 50 { return .green }
+        if info.pressure < 70 { return .yellow }
+        if info.pressure < 85 { return .orange }
         return .red
     }
 
@@ -562,6 +626,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var contextMenu: NSMenu = {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Refresh", action: #selector(refreshMemory), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Calibrate (Set Zero)", action: #selector(calibrateBaseline), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit MemBubble", action: #selector(quitApp), keyEquivalent: ""))
         return menu
@@ -569,6 +634,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func refreshMemory() {
         reader.refresh()
+    }
+
+    @objc func calibrateBaseline() {
+        reader.calibrate()
     }
 
     @objc func quitApp() {
