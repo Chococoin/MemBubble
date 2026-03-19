@@ -142,46 +142,186 @@ struct BubbleView: View {
     let info: MemoryInfo
 
     var pressureColor: Color {
-        if info.pressure < 60 { return .green }
-        if info.pressure < 80 { return .yellow }
-        if info.pressure < 90 { return .orange }
+        if info.pressure < 75 { return .green }
+        if info.pressure < 85 { return .yellow }
+        if info.pressure < 93 { return .orange }
         return .red
     }
 
+    // Pressure fill height: 0% = empty, 100% = full pearl
+    var fillRatio: CGFloat { info.pressure / 100 }
+
     var body: some View {
+        let s: CGFloat = 42
+
         ZStack {
+            // 1. Deep pearl body — dark core with radial depth
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [pressureColor.opacity(0.8), pressureColor.opacity(0.3)],
+                        colors: [
+                            Color(white: 0.18).opacity(0.6),
+                            Color(white: 0.10).opacity(0.5),
+                            Color(white: 0.05).opacity(0.4)
+                        ],
                         center: .center,
-                        startRadius: 5,
-                        endRadius: 40
+                        startRadius: s * 0.05,
+                        endRadius: s * 0.50
                     )
                 )
-                .frame(width: 72, height: 72)
+                .frame(width: s, height: s)
 
+            // 2. Internal pressure liquid — rises from bottom
             Circle()
-                .stroke(pressureColor, lineWidth: 2)
-                .frame(width: 72, height: 72)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            pressureColor.opacity(0.0),
+                            pressureColor.opacity(0.15),
+                            pressureColor.opacity(0.35),
+                            pressureColor.opacity(0.5)
+                        ],
+                        startPoint: UnitPoint(x: 0.5, y: 1.0 - fillRatio),
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: s, height: s)
 
-            // Pressure arc
+            // 3. Internal caustic reflections — reacts to pressure
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            pressureColor.opacity(0.3),
+                            pressureColor.opacity(0.08),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.3
+                    )
+                )
+                .frame(width: s * 0.6, height: s * 0.35)
+                .offset(y: s * (0.5 - fillRatio * 0.5))
+                .blur(radius: 4)
+
+            // 4. Secondary internal glow — deep refraction
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            pressureColor.opacity(0.2),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.25
+                    )
+                )
+                .frame(width: s * 0.4, height: s * 0.25)
+                .offset(x: -s * 0.08, y: s * 0.15)
+                .blur(radius: 3)
+
+            // 5. Pearl surface sheen — 3D sphere illusion
             Circle()
-                .trim(from: 0, to: info.pressure / 100)
-                .stroke(pressureColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .frame(width: 66, height: 66)
-                .rotationEffect(.degrees(-90))
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.white.opacity(0.06),
+                            Color.white.opacity(0.02),
+                            .clear
+                        ],
+                        center: UnitPoint(x: 0.35, y: 0.35),
+                        startRadius: s * 0.0,
+                        endRadius: s * 0.5
+                    )
+                )
+                .frame(width: s, height: s)
 
-            VStack(spacing: 1) {
+            // 6. Primary specular highlight — top-left light source
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(0.5),
+                            .white.opacity(0.1),
+                            .clear
+                        ],
+                        center: UnitPoint(x: 0.45, y: 0.4),
+                        startRadius: 0,
+                        endRadius: s * 0.22
+                    )
+                )
+                .frame(width: s * 0.4, height: s * 0.25)
+                .offset(x: -s * 0.08, y: -s * 0.18)
+
+            // 7. Sharp specular pinpoint
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(0.7),
+                            .white.opacity(0.0)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.08
+                    )
+                )
+                .frame(width: s * 0.1, height: s * 0.07)
+                .offset(x: -s * 0.08, y: -s * 0.2)
+
+            // 8. Rim light — edge catch from light source
+            Circle()
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            .white.opacity(0.25),
+                            .white.opacity(0.05),
+                            .clear,
+                            .clear,
+                            .clear,
+                            .white.opacity(0.08),
+                            .white.opacity(0.25)
+                        ],
+                        center: .center,
+                        startAngle: .degrees(-40),
+                        endAngle: .degrees(320)
+                    ),
+                    lineWidth: 2
+                )
+                .frame(width: s - 2, height: s - 2)
+
+            // 9. Bottom reflection — surface bounce
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(0.07),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.18
+                    )
+                )
+                .frame(width: s * 0.35, height: s * 0.12)
+                .offset(y: s * 0.34)
+
+            // 10. Text content
+            VStack(spacing: 0) {
                 Text(formatBytes(info.used))
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
+                    .font(.system(size: 7, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
                 Text(String(format: "%.0f%%", info.pressure))
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.9))
+                    .font(.system(size: 6.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(pressureColor)
             }
+            .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
         }
-        .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
+        .clipShape(Circle())
+        .opacity(0.85)
+        .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
     }
 }
 
@@ -193,9 +333,9 @@ struct DetailView: View {
     let onClose: () -> Void
 
     var pressureColor: Color {
-        if info.pressure < 60 { return .green }
-        if info.pressure < 80 { return .yellow }
-        if info.pressure < 90 { return .orange }
+        if info.pressure < 75 { return .green }
+        if info.pressure < 85 { return .yellow }
+        if info.pressure < 93 { return .orange }
         return .red
     }
 
@@ -378,7 +518,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
 
-        window.contentView = NSHostingView(rootView: contentView)
+        let hostingView = RightClickHostingView(rootView: contentView)
+        hostingView.onRightClick = { [weak self] event in
+            guard let self = self else { return }
+            NSMenu.popUpContextMenu(self.contextMenu, with: event, for: hostingView)
+        }
+        window.contentView = hostingView
         window.isOpaque = false
         window.backgroundColor = .clear
         window.level = .floating
@@ -414,17 +559,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         window.orderFrontRegardless()
-
-        // Right-click to quit
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Refresh", action: #selector(refreshMemory), keyEquivalent: "r"))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit MemBubble", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        window.contentView?.menu = menu
     }
+
+    lazy var contextMenu: NSMenu = {
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Refresh", action: #selector(refreshMemory), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit MemBubble", action: #selector(quitApp), keyEquivalent: ""))
+        return menu
+    }()
 
     @objc func refreshMemory() {
         reader.refresh()
+    }
+
+    @objc func quitApp() {
+        NSApplication.shared.terminate(nil)
+    }
+}
+
+// MARK: - Custom Hosting View for Right-Click
+
+class RightClickHostingView<Content: View>: NSHostingView<Content> {
+    var onRightClick: ((NSEvent) -> Void)?
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?(event)
     }
 }
 
