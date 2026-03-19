@@ -64,8 +64,9 @@ struct SparklineView: View {
 
 struct DetailView: View {
     let info: MemoryInfo
+    let diskInfo: DiskInfo
     let processes: [ProcessMemInfo]
-    let pressureHistory: PressureHistory
+    let session: WorkSession
     let cpuInfo: CPUInfo?
     let onClose: () -> Void
     @State private var selectedProcess: ProcessMemInfo?
@@ -81,8 +82,8 @@ struct DetailView: View {
                     .foregroundColor(.white)
                 Spacer()
 
-                if pressureHistory.peakPressure > 0 {
-                    Text(String(format: "Peak: %.0f%%", pressureHistory.peakPressure))
+                if session.peakPressure > 0 {
+                    Text(String(format: "Peak: %.0f%%", session.peakPressure))
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundColor(.white.opacity(0.5))
                 }
@@ -98,15 +99,15 @@ struct DetailView: View {
             Divider().background(Color.white.opacity(0.2))
 
             // Sparkline
-            if !pressureHistory.samples.isEmpty {
+            if !session.samples.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("PRESSURE (10 MIN)")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .foregroundColor(.white.opacity(0.4))
 
                     SparklineView(
-                        samples: pressureHistory.samples,
-                        peakPressure: pressureHistory.peakPressure,
+                        samples: session.samples,
+                        peakPressure: session.peakPressure,
                         color: pColor
                     )
                     .frame(height: 40)
@@ -189,6 +190,39 @@ struct DetailView: View {
                 }
             }
 
+            // Disk
+            if diskInfo.totalBytes > 0 {
+                HStack {
+                    Text("Disk")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Text("\(formatBytes(diskInfo.usedBytes)) / \(formatBytes(diskInfo.totalBytes)) (\(formatBytes(diskInfo.freeBytes)) free)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
+
+            Divider().background(Color.white.opacity(0.2))
+
+            // Session summary
+            VStack(alignment: .leading, spacing: 4) {
+                Text("SESSION")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.4))
+
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        statRow("Duration:", session.durationFormatted)
+                        statRow("Snapshots:", "\(session.snapshotCount)")
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        statRow("Peak CPU:", String(format: "%.0f%%", session.peakCPU))
+                        statRow("Peak RAM:", formatBytes(session.peakMemoryUsed))
+                    }
+                }
+            }
+
             Divider().background(Color.white.opacity(0.2))
 
             // Top processes
@@ -197,34 +231,16 @@ struct DetailView: View {
                 .foregroundColor(.white.opacity(0.6))
 
             ForEach(processes) { proc in
-                HStack {
-                    Text(proc.name)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    // Highlight >1 GB processes
-                    if proc.memory > 1_073_741_824 {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 8))
-                            .foregroundColor(.orange)
-                    }
-
-                    Text(formatBytes(proc.memory))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(processColor(proc.memory))
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedProcess = (selectedProcess?.pid == proc.pid) ? nil : proc
-                }
-
-                if selectedProcess?.pid == proc.pid {
-                    ProcessActionView(process: proc) {
+                ProcessRowView(
+                    process: proc,
+                    isSelected: selectedProcess?.pid == proc.pid,
+                    onSelect: {
+                        selectedProcess = (selectedProcess?.pid == proc.pid) ? nil : proc
+                    },
+                    onDismiss: {
                         selectedProcess = nil
                     }
-                }
+                )
             }
         }
         .padding(12)
@@ -252,11 +268,4 @@ struct DetailView: View {
         }
     }
 
-    func processColor(_ mem: UInt64) -> Color {
-        let mb = mem / 1_048_576
-        if mb > 500 { return .red }
-        if mb > 200 { return .orange }
-        if mb > 100 { return .yellow }
-        return .white.opacity(0.8)
-    }
 }

@@ -10,18 +10,39 @@ class RightClickHostingView<Content: View>: NSHostingView<Content> {
     override func rightMouseDown(with event: NSEvent) {
         onRightClick?(event)
     }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeKey()
+        super.mouseDown(with: event)
+    }
+}
+
+// MARK: - Floating Panel (accepts key events for clicks)
+
+class FloatingWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
+    override func resignKey() {
+        super.resignKey()
+        level = .floating
+    }
 }
 
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    var window: NSWindow!
+    var window: FloatingWindow!
     var settingsWindow: NSWindow?
     var thresholdsWindow: NSWindow?
 
     let memoryReader = MemoryReader()
     let cpuReader = CPUReader()
-    let pressureHistory = PressureHistory()
+    let session = WorkSession()
     let settings = SettingsManager.shared
     var menuBarController: MenuBarController!
 
@@ -52,11 +73,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let contentView = ContentView(
             memoryReader: memoryReader,
             cpuReader: cpuReader,
-            pressureHistory: pressureHistory,
+            session: session,
             settings: settings
         )
 
-        window = NSWindow(
+        window = FloatingWindow(
             contentRect: NSRect(x: 0, y: 0, width: 80, height: 80),
             styleMask: [.borderless],
             backing: .buffered,
@@ -118,7 +139,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Timer to record pressure history, send notifications, update menu bar
         Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            self.pressureHistory.record(self.memoryReader.info.pressure)
+            self.session.record(
+                pressure: self.memoryReader.info.pressure,
+                cpuUsage: self.cpuReader.info.totalUsage,
+                memoryUsed: self.memoryReader.info.used
+            )
             NotificationManager.shared.checkPressureAndNotify(self.memoryReader.info.pressure)
             self.menuBarController.update()
 
@@ -166,6 +191,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Sort submenu
         let sortMenu = NSMenu()
         sortMenu.addItem(NSMenuItem(title: "By Memory", action: #selector(setSortMemory), keyEquivalent: ""))
+        sortMenu.addItem(NSMenuItem(title: "By CPU", action: #selector(setSortCPU), keyEquivalent: ""))
         sortMenu.addItem(NSMenuItem(title: "By Name", action: #selector(setSortName), keyEquivalent: ""))
         let sortSubmenu = NSMenuItem(title: "Sort Processes", action: nil, keyEquivalent: "")
         sortSubmenu.submenu = sortMenu
@@ -214,6 +240,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func setDisplayBoth() { settings.displayMode = .both }
 
     @objc func setSortMemory() { settings.processSortMode = .byMemory }
+    @objc func setSortCPU() { settings.processSortMode = .byCPU }
     @objc func setSortName() { settings.processSortMode = .byName }
 
     @objc func toggleMuteNotifications() {

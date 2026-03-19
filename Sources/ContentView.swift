@@ -5,7 +5,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var memoryReader: MemoryReader
     @ObservedObject var cpuReader: CPUReader
-    @ObservedObject var pressureHistory: PressureHistory
+    @ObservedObject var session: WorkSession
     @ObservedObject var settings: SettingsManager
     @State private var expanded = false
 
@@ -14,8 +14,9 @@ struct ContentView: View {
             if expanded {
                 DetailView(
                     info: memoryReader.info,
+                    diskInfo: memoryReader.diskInfo,
                     processes: memoryReader.topProcesses,
-                    pressureHistory: pressureHistory,
+                    session: session,
                     cpuInfo: settings.displayMode != .memoryOnly ? cpuReader.info : nil,
                     onClose: { expanded = false }
                 )

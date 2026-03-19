@@ -23,6 +23,15 @@ struct ProcessMemInfo: Identifiable {
     let pid: Int32
     let name: String
     let memory: UInt64
+    let cpuPercent: Double
+}
+
+// MARK: - Disk Data
+
+struct DiskInfo {
+    var totalBytes: UInt64 = 0
+    var freeBytes: UInt64 = 0
+    var usedBytes: UInt64 = 0
 }
 
 // MARK: - CPU Data
@@ -47,4 +56,5 @@ enum DisplayMode: Int {
 enum ProcessSortMode: Int {
     case byMemory = 0
     case byName = 1
+    case byCPU = 2
 }

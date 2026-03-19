@@ -5,10 +5,13 @@ import Darwin
 
 class MemoryReader: ObservableObject {
     @Published var info = MemoryInfo()
+    @Published var diskInfo = DiskInfo()
     @Published var topProcesses: [ProcessMemInfo] = []
 
     private var timer: Timer?
     private(set) var baselineUsed: UInt64 = 0
+    private var previousCPUTimes: [Int32: Double] = [:]  // pid -> total CPU seconds
+    private var previousSampleTime: Date = Date()
 
     init() {
         // Capture raw memory first to establish baseline
@@ -39,6 +42,7 @@ class MemoryReader: ObservableObject {
     func refresh() {
         info = readSystemMemory()
         recalculatePressure()
+        diskInfo = readDiskUsage()
 
         let sortMode = SettingsManager.shared.processSortMode
         topProcesses = readTopProcesses(limit: 12, sortMode: sortMode)
@@ -139,11 +143,16 @@ class MemoryReader: ObservableObject {
     }
 
     private func readTopProcesses(limit: Int, sortMode: ProcessSortMode = .byMemory) -> [ProcessMemInfo] {
+        let now = Date()
+        let elapsed = now.timeIntervalSince(previousSampleTime)
+        previousSampleTime = now
+
         var pids = [pid_t](repeating: 0, count: 2048)
         let bytesUsed = proc_listallpids(&pids, Int32(MemoryLayout<pid_t>.size * pids.count))
         let pidCount = Int(bytesUsed) / MemoryLayout<pid_t>.size
 
         var processes: [ProcessMemInfo] = []
+        var currentCPUTimes: [Int32: Double] = [:]
 
         for i in 0..<pidCount {
             let pid = pids[i]
@@ -161,19 +170,50 @@ class MemoryReader: ObservableObject {
                     let name = String(cString: nameBuffer)
 
                     if !name.isEmpty {
-                        processes.append(ProcessMemInfo(pid: pid, name: name, memory: mem))
+                        // CPU time in seconds (user + system)
+                        let totalCPU = Double(taskInfo.pti_total_user) / 1_000_000_000.0
+                                     + Double(taskInfo.pti_total_system) / 1_000_000_000.0
+                        currentCPUTimes[pid] = totalCPU
+
+                        // Compute CPU% as delta of CPU time / elapsed wall time
+                        var cpuPercent = 0.0
+                        if elapsed > 0, let prev = previousCPUTimes[pid] {
+                            let delta = totalCPU - prev
+                            cpuPercent = (delta / elapsed) * 100.0
+                            if cpuPercent < 0 { cpuPercent = 0 }
+                        }
+
+                        processes.append(ProcessMemInfo(pid: pid, name: name, memory: mem, cpuPercent: cpuPercent))
                     }
                 }
             }
         }
+
+        previousCPUTimes = currentCPUTimes
 
         switch sortMode {
         case .byMemory:
             processes.sort { $0.memory > $1.memory }
         case .byName:
             processes.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .byCPU:
+            processes.sort { $0.cpuPercent > $1.cpuPercent }
         }
 
         return Array(processes.prefix(limit))
+    }
+
+    private func readDiskUsage() -> DiskInfo {
+        var disk = DiskInfo()
+        do {
+            let attrs = try FileManager.default.attributesOfFileSystem(forPath: "/")
+            if let total = attrs[.systemSize] as? UInt64,
+               let free = attrs[.systemFreeSize] as? UInt64 {
+                disk.totalBytes = total
+                disk.freeBytes = free
+                disk.usedBytes = total - free
+            }
+        } catch {}
+        return disk
     }
 }
