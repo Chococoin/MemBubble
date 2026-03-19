@@ -8,6 +8,7 @@ struct ContentView: View {
     @ObservedObject var session: WorkSession
     @ObservedObject var settings: SettingsManager
     @State private var expanded = false
+    @State private var showContent = true  // controls fade in/out
 
     var body: some View {
         Group {
@@ -18,15 +19,42 @@ struct ContentView: View {
                     processes: memoryReader.topProcesses,
                     session: session,
                     cpuInfo: settings.displayMode != .memoryOnly ? cpuReader.info : nil,
-                    onClose: { expanded = false }
+                    onClose: { collapse() }
                 )
+                .opacity(showContent ? 1 : 0)
             } else {
                 bubbleContent
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            expanded = true
-                        }
-                    }
+                    .opacity(showContent ? 1 : 0)
+                    .onTapGesture { expand() }
+            }
+        }
+    }
+
+    private func expand() {
+        // Fade out bubble
+        withAnimation(.easeOut(duration: 0.1)) {
+            showContent = false
+        }
+        // Switch to detail after fade out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            expanded = true
+            // Fade in detail
+            withAnimation(.easeIn(duration: 0.15)) {
+                showContent = true
+            }
+        }
+    }
+
+    private func collapse() {
+        // Fade out detail
+        withAnimation(.easeOut(duration: 0.1)) {
+            showContent = false
+        }
+        // Switch to bubble after fade out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            expanded = false
+            withAnimation(.easeIn(duration: 0.15)) {
+                showContent = true
             }
         }
     }

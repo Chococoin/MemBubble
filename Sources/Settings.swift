@@ -78,15 +78,15 @@ class SettingsManager: ObservableObject {
         self.processSortMode = ProcessSortMode(rawValue: defaults.integer(forKey: SettingsKey.processSortMode)) ?? .byMemory
     }
 
-    // MARK: - Window Position
+    // MARK: - Window Position (stores top-right anchor point)
 
-    func saveWindowPosition(_ point: NSPoint) {
+    func saveWindowAnchor(_ topRight: NSPoint) {
         let defaults = UserDefaults.standard
-        defaults.set(Double(point.x), forKey: SettingsKey.windowX)
-        defaults.set(Double(point.y), forKey: SettingsKey.windowY)
+        defaults.set(Double(topRight.x), forKey: SettingsKey.windowX)
+        defaults.set(Double(topRight.y), forKey: SettingsKey.windowY)
     }
 
-    func loadWindowPosition() -> NSPoint? {
+    func loadWindowAnchor() -> NSPoint? {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: SettingsKey.windowX) != nil else { return nil }
         let x = defaults.double(forKey: SettingsKey.windowX)
