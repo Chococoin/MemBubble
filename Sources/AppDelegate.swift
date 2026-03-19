@@ -227,7 +227,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        menu.addItem(NSMenuItem(title: "Export Session...", action: #selector(exportSession), keyEquivalent: ""))
+        // Export submenu
+        let exportMenu = NSMenu()
+        exportMenu.addItem(NSMenuItem(title: "Export All (JSON + CSV + HTML)", action: #selector(exportAll), keyEquivalent: ""))
+        exportMenu.addItem(NSMenuItem.separator())
+        exportMenu.addItem(NSMenuItem(title: "Export JSON", action: #selector(exportJSON), keyEquivalent: ""))
+        exportMenu.addItem(NSMenuItem(title: "Export CSV", action: #selector(exportCSV), keyEquivalent: ""))
+        exportMenu.addItem(NSMenuItem(title: "Export HTML Report", action: #selector(exportHTML), keyEquivalent: ""))
+        let exportSubmenu = NSMenuItem(title: "Export Session", action: nil, keyEquivalent: "")
+        exportSubmenu.submenu = exportMenu
+        menu.addItem(exportSubmenu)
         menu.addItem(NSMenuItem(title: "Open Sessions Folder", action: #selector(openSessionsFolder), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Thresholds...", action: #selector(showThresholds), keyEquivalent: ""))
@@ -319,9 +328,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc func exportSession() {
-        if let url = SessionExporter.shared.exportSession(session: session) {
+    @objc func exportAll() {
+        if let url = SessionExporter.shared.exportAll(session: session) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc func exportJSON() {
+        if let url = SessionExporter.shared.exportJSON(session: session) {
             NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+        }
+    }
+
+    @objc func exportCSV() {
+        if let url = SessionExporter.shared.exportCSV(session: session) {
+            NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+        }
+    }
+
+    @objc func exportHTML() {
+        if let url = SessionExporter.shared.exportHTML(session: session) {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -330,8 +357,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func quitApp() {
-        // Auto-export session on quit
-        _ = SessionExporter.shared.exportSession(session: session)
+        // Auto-export session in all formats on quit
+        _ = SessionExporter.shared.exportAll(session: session)
         NSApplication.shared.terminate(nil)
     }
 }
