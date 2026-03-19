@@ -53,6 +53,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Request notification permission
         NotificationManager.shared.requestPermission()
 
+        // Start recording snapshots for session export
+        SessionExporter.shared.startRecording(memoryReader: memoryReader, cpuReader: cpuReader)
+
         // Setup menu bar
         menuBarController = MenuBarController(memoryReader: memoryReader, cpuReader: cpuReader)
         menuBarController.onToggleBubble = { [weak self] in
@@ -218,6 +221,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        menu.addItem(NSMenuItem(title: "Export Session...", action: #selector(exportSession), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Open Sessions Folder", action: #selector(openSessionsFolder), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Thresholds...", action: #selector(showThresholds), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
@@ -307,7 +313,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @objc func exportSession() {
+        if let url = SessionExporter.shared.exportSession(session: session) {
+            NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+        }
+    }
+
+    @objc func openSessionsFolder() {
+        NSWorkspace.shared.open(SessionExporter.shared.sessionsDirectory)
+    }
+
     @objc func quitApp() {
+        // Auto-export session on quit
+        _ = SessionExporter.shared.exportSession(session: session)
         NSApplication.shared.terminate(nil)
     }
 }

@@ -190,16 +190,43 @@ struct DetailView: View {
                 }
             }
 
-            // Disk
+            // Disk bar
             if diskInfo.totalBytes > 0 {
-                HStack {
-                    Text("Disk")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text("\(formatBytes(diskInfo.usedBytes)) / \(formatBytes(diskInfo.totalBytes)) (\(formatBytes(diskInfo.freeBytes)) free)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.8))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Disk")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                        Spacer()
+                        Text("\(formatBytes(diskInfo.usedBytes)) / \(formatBytes(diskInfo.totalBytes))")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.white.opacity(0.15))
+
+                            let usedRatio = CGFloat(diskInfo.usedBytes) / CGFloat(diskInfo.totalBytes)
+                            let diskColor: Color = usedRatio > 0.9 ? .red : usedRatio > 0.75 ? .orange : .purple
+
+                            Rectangle()
+                                .fill(diskColor.opacity(0.7))
+                                .frame(width: geo.size.width * usedRatio)
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                        }
+                    }
+                    .frame(height: 10)
+
+                    HStack(spacing: 12) {
+                        Label("Used", systemImage: "circle.fill")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.purple.opacity(0.8))
+                        Label("\(formatBytes(diskInfo.freeBytes)) free", systemImage: "circle.fill")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
                 }
             }
 

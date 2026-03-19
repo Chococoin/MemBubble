@@ -165,9 +165,27 @@ class MemoryReader: ObservableObject {
             if ret > 0 {
                 let mem = UInt64(taskInfo.pti_resident_size)
                 if mem > 10 * 1024 * 1024 {
-                    var nameBuffer = [CChar](repeating: 0, count: 1024)
-                    proc_name(pid, &nameBuffer, UInt32(nameBuffer.count))
-                    let name = String(cString: nameBuffer)
+                    // Try proc_pidpath first for reliable name, fall back to proc_name
+                    var pathBuffer = [CChar](repeating: 0, count: 4096)
+                    let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
+                    var name: String
+                    if pathLen > 0 {
+                        let fullPath = String(cString: pathBuffer)
+                        let lastComponent = (fullPath as NSString).lastPathComponent
+                        // If last component looks like a version number, use parent dir name
+                        if lastComponent.allSatisfy({ $0.isNumber || $0 == "." }) {
+                            let parent = ((fullPath as NSString).deletingLastPathComponent as NSString).lastPathComponent
+                            name = parent == "versions" ?
+                                ((((fullPath as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent as NSString).lastPathComponent) :
+                                parent
+                        } else {
+                            name = lastComponent
+                        }
+                    } else {
+                        var nameBuffer = [CChar](repeating: 0, count: 1024)
+                        proc_name(pid, &nameBuffer, UInt32(nameBuffer.count))
+                        name = String(cString: nameBuffer)
+                    }
 
                     if !name.isEmpty {
                         // CPU time in seconds (user + system)
