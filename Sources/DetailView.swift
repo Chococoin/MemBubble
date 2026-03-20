@@ -67,6 +67,7 @@ struct DetailView: View {
     let diskInfo: DiskInfo
     let processes: [ProcessMemInfo]
     let session: WorkSession
+    let activity: Double
     let cpuInfo: CPUInfo?
     let onClose: () -> Void
     @State private var selectedProcess: ProcessMemInfo?
@@ -174,6 +175,17 @@ struct DetailView: View {
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.white.opacity(0.8))
                 }
+            }
+
+            // Activity (baseline-relative)
+            HStack {
+                Text("Activity")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                Spacer()
+                Text(String(format: "%.0f%% since launch", activity))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.mint.opacity(0.8))
             }
 
             // Stats grid

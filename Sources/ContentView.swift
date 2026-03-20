@@ -18,6 +18,7 @@ struct ContentView: View {
                     diskInfo: memoryReader.diskInfo,
                     processes: memoryReader.topProcesses,
                     session: session,
+                    activity: memoryReader.activity,
                     cpuInfo: settings.displayMode != .memoryOnly ? cpuReader.info : nil,
                     onClose: { collapse() }
                 )
@@ -69,6 +70,12 @@ struct ContentView: View {
         case .both:
             HStack(spacing: 4) {
                 BubbleView(info: memoryReader.info)
+                CPUBubbleView(info: cpuReader.info)
+            }
+        case .all:
+            HStack(spacing: 4) {
+                BubbleView(info: memoryReader.info)
+                ActivityBubbleView(activity: memoryReader.activity)
                 CPUBubbleView(info: cpuReader.info)
             }
         }

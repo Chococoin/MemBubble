@@ -190,9 +190,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let memItem = NSMenuItem(title: "Memory Only", action: #selector(setDisplayMemory), keyEquivalent: "")
         let cpuItem = NSMenuItem(title: "CPU Only", action: #selector(setDisplayCPU), keyEquivalent: "")
         let bothItem = NSMenuItem(title: "Memory + CPU", action: #selector(setDisplayBoth), keyEquivalent: "")
+        let allItem = NSMenuItem(title: "Memory + Activity + CPU", action: #selector(setDisplayAll), keyEquivalent: "")
         displayMenu.addItem(memItem)
         displayMenu.addItem(cpuItem)
         displayMenu.addItem(bothItem)
+        displayMenu.addItem(allItem)
         let displaySubmenu = NSMenuItem(title: "Display Mode", action: nil, keyEquivalent: "")
         displaySubmenu.submenu = displayMenu
         menu.addItem(displaySubmenu)
@@ -259,6 +261,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func setDisplayMemory() { settings.displayMode = .memoryOnly }
     @objc func setDisplayCPU() { settings.displayMode = .cpuOnly }
     @objc func setDisplayBoth() { settings.displayMode = .both }
+    @objc func setDisplayAll() { settings.displayMode = .all }
 
     @objc func setSortMemory() { settings.processSortMode = .byMemory }
     @objc func setSortCPU() { settings.processSortMode = .byCPU }

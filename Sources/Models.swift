@@ -81,6 +81,7 @@ enum DisplayMode: Int {
     case memoryOnly = 0
     case cpuOnly = 1
     case both = 2
+    case all = 3  // memory + activity + CPU
 }
 
 // MARK: - Process Sort Mode

@@ -52,9 +52,10 @@ struct SettingsView: View {
             ))
 
             Picker("Display Mode", selection: $settings.displayMode) {
-                Text("Memory Only").tag(DisplayMode.memoryOnly)
-                Text("CPU Only").tag(DisplayMode.cpuOnly)
-                Text("Memory + CPU").tag(DisplayMode.both)
+                Text("Memory").tag(DisplayMode.memoryOnly)
+                Text("CPU").tag(DisplayMode.cpuOnly)
+                Text("Mem+CPU").tag(DisplayMode.both)
+                Text("All").tag(DisplayMode.all)
             }
             .pickerStyle(.segmented)
 

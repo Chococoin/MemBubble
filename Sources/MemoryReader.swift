@@ -7,6 +7,7 @@ class MemoryReader: ObservableObject {
     @Published var info = MemoryInfo()
     @Published var diskInfo = DiskInfo()
     @Published var topProcesses: [ProcessMemInfo] = []
+    @Published var activity: Double = 0  // baseline-relative usage 0-100%
 
     private var timer: Timer?
     private(set) var baselineUsed: UInt64 = 0
@@ -42,6 +43,7 @@ class MemoryReader: ObservableObject {
     func refresh() {
         info = readSystemMemory()
         recalculatePressure()
+        recalculateActivity()
         diskInfo = readDiskUsage()
 
         let sortMode = SettingsManager.shared.processSortMode
@@ -107,6 +109,18 @@ class MemoryReader: ObservableObject {
         }
 
         info.pressure = min(pressure, 100)
+    }
+
+    private func recalculateActivity() {
+        // Activity = how much more memory is being used compared to baseline (launch/calibrate)
+        // 0% = same as baseline, 100% = all remaining RAM consumed since baseline
+        let available = info.total - baselineUsed
+        if info.used > baselineUsed && available > 0 {
+            let delta = info.used - baselineUsed
+            activity = min(Double(delta) / Double(available) * 100, 100)
+        } else {
+            activity = 0
+        }
     }
 
     private func readSystemMemory() -> MemoryInfo {
