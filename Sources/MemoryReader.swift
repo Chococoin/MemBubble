@@ -49,42 +49,64 @@ class MemoryReader: ObservableObject {
     }
 
     private func recalculatePressure() {
-        // 1. RAM pressure relative to baseline
-        let available = info.total - baselineUsed
-        var ramPressure: Double = 0
-        if info.used > baselineUsed && available > 0 {
-            let delta = info.used - baselineUsed
-            ramPressure = min(Double(delta) / Double(available) * 100, 100)
-        }
+        // Pressure should reflect REAL danger, not just memory usage.
+        // macOS keeps RAM full by design (inactive pages, caches). That's normal.
+        // Real danger = kernel pressure level + heavy swap + high compression.
+        //
+        // Levels:
+        //   Green  (0-49):  Normal operation, system healthy
+        //   Yellow (50-69): Elevated, some swap or compression
+        //   Orange (70-84): High, significant swap or kernel warning
+        //   Red    (85+):   Critical, system struggling, close apps now
 
-        // 2. Swap boost — swap usage as % of total RAM adds urgency
-        let swapBoost: Double
-        if info.total > 0 && info.swapUsed > 0 {
-            let swapRatio = Double(info.swapUsed) / Double(info.total) * 100
-            swapBoost = min(swapRatio * 2, 40)
-        } else {
-            swapBoost = 0
-        }
+        var pressure: Double = 0
 
-        // 3. Kernel pressure level boost — the OS itself is alarming
-        let kernelBoost: Double
+        // 1. Kernel pressure level — the most authoritative signal from macOS itself
+        //    This is what the OS uses internally to decide when to kill apps
         switch info.kernelPressureLevel {
-        case 1: kernelBoost = 15   // warn
-        case 2: kernelBoost = 30   // critical
-        case 4: kernelBoost = 50   // urgent
-        default: kernelBoost = 0   // normal
+        case 0: pressure = 10   // normal — base level, everything fine
+        case 1: pressure = 45   // warn — system noticed pressure
+        case 2: pressure = 75   // critical — system actively reclaiming
+        case 4: pressure = 90   // urgent — system about to kill processes
+        default: pressure = 10
         }
 
-        // 4. Compressed ratio boost — high compression = CPU strain
-        let compressBoost: Double
-        if info.compressedRatio > 0.25 {
-            compressBoost = (info.compressedRatio - 0.25) * 60
-        } else {
-            compressBoost = 0
+        // 2. Swap usage — real indicator of memory exhaustion
+        //    Small swap (< 200MB) is normal on macOS, don't panic
+        //    Heavy swap (> 1GB) means RAM is genuinely full
+        if info.total > 0 && info.swapUsed > 0 {
+            let swapMB = Double(info.swapUsed) / 1_048_576
+            if swapMB > 2000 {
+                pressure += 25      // > 2GB swap: serious
+            } else if swapMB > 1000 {
+                pressure += 15      // > 1GB swap: elevated
+            } else if swapMB > 200 {
+                pressure += 8       // > 200MB swap: mild
+            }
+            // < 200MB swap: normal, no boost
         }
 
-        // Composite: RAM is base, signals boost the severity
-        info.pressure = min(ramPressure + swapBoost + kernelBoost + compressBoost, 100)
+        // 3. Compressed memory ratio — high compression means CPU is working hard
+        //    to keep things in RAM. > 30% is notable, > 40% is heavy
+        if info.compressedRatio > 0.40 {
+            pressure += 12
+        } else if info.compressedRatio > 0.30 {
+            pressure += 5
+        }
+
+        // 4. Available memory (free + inactive) — if truly near zero, boost
+        //    Inactive can be reclaimed instantly, so free+inactive is what matters
+        let reclaimable = info.free + info.inactive
+        if info.total > 0 {
+            let reclaimableRatio = Double(reclaimable) / Double(info.total)
+            if reclaimableRatio < 0.05 {
+                pressure += 15   // < 5% reclaimable: dangerous
+            } else if reclaimableRatio < 0.10 {
+                pressure += 5    // < 10% reclaimable: getting tight
+            }
+        }
+
+        info.pressure = min(pressure, 100)
     }
 
     private func readSystemMemory() -> MemoryInfo {
