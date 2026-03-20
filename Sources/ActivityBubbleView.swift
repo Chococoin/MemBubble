@@ -12,13 +12,14 @@ struct ActivityBubbleView: View {
         return .pink
     }
 
-    var fillRatio: CGFloat { min(activity / 100, 1.0) }
+    // Minimum 15% fill so the pearl never looks empty/opaque
+    var fillRatio: CGFloat { max(0.15, min(activity / 100, 1.0)) }
 
     var body: some View {
         let s: CGFloat = 28
 
         ZStack {
-            // Pearl body
+            // Pearl body — same dark core as other bubbles
             Circle()
                 .fill(
                     RadialGradient(
@@ -30,6 +31,21 @@ struct ActivityBubbleView: View {
                         center: .center,
                         startRadius: s * 0.05,
                         endRadius: s * 0.50
+                    )
+                )
+                .frame(width: s, height: s)
+
+            // Ambient mint tint — visible even at 0% so it's not just gray
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            activityColor.opacity(0.12),
+                            activityColor.opacity(0.18)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
                 )
                 .frame(width: s, height: s)
@@ -51,6 +67,41 @@ struct ActivityBubbleView: View {
                 .frame(width: s, height: s)
                 .animation(.easeInOut(duration: 0.8), value: fillRatio)
 
+            // Internal caustic reflections
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            activityColor.opacity(0.4),
+                            activityColor.opacity(0.12),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.3
+                    )
+                )
+                .frame(width: s * 0.6, height: s * 0.35)
+                .offset(y: s * (0.5 - fillRatio * 0.5))
+                .blur(radius: 4)
+
+            // Secondary internal glow
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            activityColor.opacity(0.2),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.25
+                    )
+                )
+                .frame(width: s * 0.4, height: s * 0.25)
+                .offset(x: -s * 0.08, y: s * 0.15)
+                .blur(radius: 3)
+
             // Surface sheen
             Circle()
                 .fill(
@@ -67,7 +118,7 @@ struct ActivityBubbleView: View {
                 )
                 .frame(width: s, height: s)
 
-            // Specular highlight
+            // Primary specular highlight
             Ellipse()
                 .fill(
                     RadialGradient(
@@ -83,6 +134,22 @@ struct ActivityBubbleView: View {
                 )
                 .frame(width: s * 0.4, height: s * 0.25)
                 .offset(x: -s * 0.08, y: -s * 0.18)
+
+            // Sharp specular pinpoint
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(0.7),
+                            .white.opacity(0.0)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.08
+                    )
+                )
+                .frame(width: s * 0.1, height: s * 0.07)
+                .offset(x: -s * 0.08, y: -s * 0.2)
 
             // Rim light
             Circle()
@@ -104,6 +171,22 @@ struct ActivityBubbleView: View {
                     lineWidth: 2
                 )
                 .frame(width: s - 2, height: s - 2)
+
+            // Bottom reflection
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(0.07),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: s * 0.18
+                    )
+                )
+                .frame(width: s * 0.35, height: s * 0.12)
+                .offset(y: s * 0.34)
 
             // Text
             VStack(spacing: 0) {
