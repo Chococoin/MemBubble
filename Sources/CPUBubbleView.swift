@@ -12,7 +12,7 @@ struct CPUBubbleView: View {
         return .red
     }
 
-    var fillRatio: CGFloat { min(info.totalUsage / 100, 1.0) }
+    var fillRatio: CGFloat { max(0.15, min(info.totalUsage / 100, 1.0)) }
 
     var body: some View {
         let s: CGFloat = 28

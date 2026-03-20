@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MemBubble Stress Test Panel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 32px;
+        }
+        h1 { font-size: 20px; margin-bottom: 8px; }
+        .subtitle { color: #808090; font-size: 12px; margin-bottom: 32px; }
+        .knobs { display: flex; gap: 48px; margin-bottom: 32px; }
+        .knob-container { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .knob-label {
+            font-size: 11px; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase; color: #808090;
+        }
+        .knob-value {
+            font-size: 18px; font-weight: 700; font-family: 'SF Mono', monospace;
+        }
+        canvas { cursor: pointer; }
+        .commands {
+            background: #252540; border-radius: 12px; padding: 20px;
+            width: 500px; margin-top: 16px;
+        }
+        .commands h2 {
+            font-size: 12px; color: #808090; text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 12px;
+        }
+        .cmd {
+            font-family: 'SF Mono', monospace; font-size: 12px;
+            background: #1a1a2e; padding: 10px 14px; border-radius: 8px;
+            margin-bottom: 8px; color: #4ade80; word-break: break-all;
+        }
+        .cmd.active { border: 1px solid #4ade80; }
+        .cmd.inactive { color: #505060; border: 1px solid transparent; }
+        .stop-btn {
+            background: #dc2626; color: white; border: none; padding: 10px 24px;
+            border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+            margin-top: 16px;
+        }
+        .stop-btn:hover { background: #ef4444; }
+        .note {
+            color: #505060; font-size: 11px; margin-top: 24px; max-width: 500px;
+            text-align: center; line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <h1>MemBubble Stress Test Panel</h1>
+    <p class="subtitle">Turn knobs to generate terminal commands — paste them to stress the system</p>
+
+    <div class="knobs">
+        <div class="knob-container">
+            <span class="knob-label">Memory</span>
+            <canvas id="memKnob" width="120" height="120"></canvas>
+            <span class="knob-value" id="memValue" style="color: #4ade80;">0%</span>
+        </div>
+        <div class="knob-container">
+            <span class="knob-label">CPU</span>
+            <canvas id="cpuKnob" width="120" height="120"></canvas>
+            <span class="knob-value" id="cpuValue" style="color: #22d3ee;">0%</span>
+        </div>
+    </div>
+
+    <div class="commands">
+        <h2>Run in Terminal</h2>
+        <div class="cmd" id="memCmd">—</div>
+        <div class="cmd" id="cpuCmd">—</div>
+    </div>
+
+    <button class="stop-btn" onclick="resetAll()">Stop All (paste this)</button>
+    <div class="cmd" id="stopCmd" style="margin-top: 8px; width: 500px; text-align: center;">
+        pkill -f stress_memory; pkill -f "python3 -c"
+    </div>
+
+    <p class="note">
+        This panel generates commands — copy and paste them into your terminal.
+        Watch the MemBubble bubbles change color as pressure increases.
+        Use "Stop All" command to kill stress processes.
+    </p>
+
+    <script>
+        class Knob {
+            constructor(canvasId, color, onChange) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.color = color;
+                this.value = 0;
+                this.onChange = onChange;
+                this.dragging = false;
+                this.cx = 60;
+                this.cy = 60;
+                this.radius = 40;
+
+                this.canvas.addEventListener('mousedown', () => this.dragging = true);
+                this.canvas.addEventListener('mouseup', () => this.dragging = false);
+                this.canvas.addEventListener('mouseleave', () => this.dragging = false);
+                this.canvas.addEventListener('mousemove', (e) => this.onMove(e));
+                this.canvas.addEventListener('click', (e) => this.onClick(e));
+
+                this.draw();
+            }
+
+            onClick(e) {
+                this.updateFromMouse(e);
+            }
+
+            onMove(e) {
+                if (!this.dragging) return;
+                this.updateFromMouse(e);
+            }
+
+            updateFromMouse(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left - this.cx;
+                const y = e.clientY - rect.top - this.cy;
+                let angle = Math.atan2(x, -y) * 180 / Math.PI;
+                // Clamp to -135..135 range
+                angle = Math.max(-135, Math.min(135, angle));
+                this.value = (angle + 135) / 270;
+                this.draw();
+                this.onChange(this.value);
+            }
+
+            draw() {
+                const ctx = this.ctx;
+                const cx = this.cx, cy = this.cy, r = this.radius;
+                ctx.clearRect(0, 0, 120, 120);
+
+                // Track
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 6, Math.PI * 0.75, Math.PI * 2.25, false);
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // Active arc
+                const startAngle = Math.PI * 0.75;
+                const endAngle = startAngle + (Math.PI * 1.5) * this.value;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 6, startAngle, endAngle, false);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // Knob body
+                const grad = ctx.createRadialGradient(cx - 5, cy - 5, 0, cx, cy, r);
+                grad.addColorStop(0, '#555');
+                grad.addColorStop(0.5, '#333');
+                grad.addColorStop(1, '#222');
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // Knob edge
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Indicator
+                const indicatorAngle = (-135 + 270 * this.value) * Math.PI / 180 - Math.PI / 2;
+                const ix1 = cx + Math.cos(indicatorAngle) * 12;
+                const iy1 = cy + Math.sin(indicatorAngle) * 12;
+                const ix2 = cx + Math.cos(indicatorAngle) * (r - 4);
+                const iy2 = cy + Math.sin(indicatorAngle) * (r - 4);
+                ctx.beginPath();
+                ctx.moveTo(ix1, iy1);
+                ctx.lineTo(ix2, iy2);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fill();
+            }
+        }
+
+        const scriptDir = 'tests';
+
+        function updateMemCmd(value) {
+            const pct = Math.round(value * 100);
+            document.getElementById('memValue').textContent = pct + '%';
+            const el = document.getElementById('memCmd');
+            if (pct < 5) {
+                el.textContent = '—';
+                el.className = 'cmd inactive';
+            } else {
+                const mb = Math.round(value * 12288);
+                const count = Math.max(1, Math.floor(mb / 2048));
+                const perProc = Math.round(mb / count);
+                let cmd = '';
+                for (let i = 0; i < count; i++) {
+                    cmd += `python3 ${scriptDir}/stress_memory.py ${perProc} & `;
+                }
+                el.textContent = cmd.trim();
+                el.className = 'cmd active';
+            }
+        }
+
+        function updateCpuCmd(value) {
+            const pct = Math.round(value * 100);
+            document.getElementById('cpuValue').textContent = pct + '%';
+            const el = document.getElementById('cpuCmd');
+            if (pct < 5) {
+                el.textContent = '—';
+                el.className = 'cmd inactive';
+            } else {
+                const threads = Math.max(1, Math.round(value * 8));
+                let cmd = '';
+                for (let i = 0; i < threads; i++) {
+                    cmd += `python3 -c "import math
+while True:
+ for i in range(100000): math.sqrt(i*1.23)" & `;
+                }
+                el.textContent = cmd.trim();
+                el.className = 'cmd active';
+            }
+        }
+
+        function resetAll() {
+            const cmd = document.getElementById('stopCmd').textContent;
+            navigator.clipboard.writeText(cmd).then(() => {
+                document.getElementById('stopCmd').style.borderColor = '#4ade80';
+                setTimeout(() => {
+                    document.getElementById('stopCmd').style.borderColor = 'transparent';
+                }, 1000);
+            });
+        }
+
+        // Click on command to copy
+        document.querySelectorAll('.cmd').forEach(el => {
+            el.addEventListener('click', () => {
+                if (el.textContent !== '—') {
+                    navigator.clipboard.writeText(el.textContent);
+                    el.style.borderColor = '#4ade80';
+                    setTimeout(() => { el.style.borderColor = ''; }, 800);
+                }
+            });
+            el.style.cursor = 'pointer';
+        });
+
+        const memKnob = new Knob('memKnob', '#4ade80', updateMemCmd);
+        const cpuKnob = new Knob('cpuKnob', '#22d3ee', updateCpuCmd);
+    </script>
+</body>
+</html>

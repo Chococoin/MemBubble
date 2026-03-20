@@ -8,7 +8,7 @@ struct BubbleView: View {
     @State private var shakeOffset: CGFloat = 0
 
     var pColor: Color { pressureColor(for: info.pressure) }
-    var fillRatio: CGFloat { info.pressure / 100 }
+    var fillRatio: CGFloat { max(0.15, info.pressure / 100) }
 
     var body: some View {
         let s: CGFloat = 28
