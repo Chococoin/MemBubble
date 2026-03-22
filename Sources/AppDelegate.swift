@@ -21,11 +21,11 @@ class RightClickHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
-// MARK: - Floating Panel (accepts key events for clicks)
+// MARK: - Floating Panel (stays on all spaces, even with .regular activation)
 
-class FloatingWindow: NSWindow {
+class FloatingWindow: NSPanel {
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    override var canBecomeMain: Bool { false }
 
     override func resignKey() {
         super.resignKey()
@@ -48,9 +48,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Accessory mode: floats on all spaces, no dock icon at runtime
-        // App icon is visible in Finder/Applications via CFBundleIconFile
-        NSApp.setActivationPolicy(.accessory)
+        // Regular mode: shows dock icon. Floating panel stays on all spaces.
+        NSApp.setActivationPolicy(.regular)
 
         // Request notification permission
         NotificationManager.shared.requestPermission()
@@ -84,10 +83,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         window = FloatingWindow(
             contentRect: NSRect(x: 0, y: 0, width: 80, height: 80),
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
+        window.isFloatingPanel = true
+        window.hidesOnDeactivate = false
 
         let hostingView = RightClickHostingView(rootView: contentView)
         hostingView.onRightClick = { [weak self] event in
