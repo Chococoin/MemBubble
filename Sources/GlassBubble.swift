@@ -22,20 +22,21 @@ struct GlassBubbleView<Label: View>: View {
 
     var body: some View {
         ZStack {
-            // Glass base — stable material, no focus-dependent rendering
+            // Glass base — nearly invisible material, maximum transparency
             Circle()
                 .fill(.ultraThinMaterial)
                 .environment(\.colorScheme, .dark)
+                .opacity(0.04)
                 .frame(width: size, height: size)
 
-            // Liquid fill — rises from bottom
+            // Liquid fill — rises from bottom, vivid color
             Circle()
                 .fill(
                     LinearGradient(
                         colors: [
                             tintColor.opacity(0.0),
-                            tintColor.opacity(0.12),
-                            tintColor.opacity(0.30)
+                            tintColor.opacity(0.30),
+                            tintColor.opacity(0.80)
                         ],
                         startPoint: UnitPoint(x: 0.5, y: 1.0 - fillRatio),
                         endPoint: .bottom
@@ -49,8 +50,8 @@ struct GlassBubbleView<Label: View>: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            .white.opacity(0.30),
-                            .white.opacity(0.08),
+                            .white.opacity(0.44),
+                            .white.opacity(0.11),
                             .clear
                         ],
                         center: UnitPoint(x: 0.4, y: 0.35),
@@ -66,7 +67,7 @@ struct GlassBubbleView<Label: View>: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            .white.opacity(0.5),
+                            .white.opacity(0.14),
                             .clear
                         ],
                         center: .center,
@@ -82,19 +83,19 @@ struct GlassBubbleView<Label: View>: View {
                 .stroke(
                     AngularGradient(
                         colors: [
-                            .white.opacity(0.20),
-                            .white.opacity(0.04),
+                            .white.opacity(0.40),
+                            .white.opacity(0.08),
                             .clear,
                             .clear,
                             .clear,
-                            .white.opacity(0.06),
-                            .white.opacity(0.20)
+                            .white.opacity(0.12),
+                            .white.opacity(0.40)
                         ],
                         center: .center,
                         startAngle: .degrees(-40),
                         endAngle: .degrees(320)
                     ),
-                    lineWidth: 1
+                    lineWidth: 0.5
                 )
                 .frame(width: size - 1, height: size - 1)
 
@@ -103,7 +104,7 @@ struct GlassBubbleView<Label: View>: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            .white.opacity(0.05),
+                            .white.opacity(0.14),
                             .clear
                         ],
                         center: .center,
@@ -118,7 +119,7 @@ struct GlassBubbleView<Label: View>: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
-        .shadow(color: .black.opacity(0.25), radius: 5, x: 0, y: 3)
+        .shadow(color: .black.opacity(0.57), radius: 3.3, x: 0, y: 3)
     }
 }
 
