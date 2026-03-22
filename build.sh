@@ -16,6 +16,17 @@ WIDGET_MACOS="${WIDGET_CONTENTS}/MacOS"
 # e.g. SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 
+# Detect macOS SDK version for Liquid Glass support
+SDK_VERSION=$(xcrun --show-sdk-version 2>/dev/null || echo "0")
+SDK_MAJOR=$(echo "$SDK_VERSION" | cut -d. -f1)
+GLASS_FLAGS=""
+if [ "$SDK_MAJOR" -ge 26 ] 2>/dev/null; then
+    GLASS_FLAGS="-DLIQUID_GLASS"
+    echo "==> Liquid Glass enabled (SDK ${SDK_VERSION})"
+else
+    echo "==> Legacy pearl mode (SDK ${SDK_VERSION}, need 26+ for Liquid Glass)"
+fi
+
 echo "==> Building ${APP_NAME}..."
 
 # Clean previous build
@@ -28,6 +39,7 @@ mkdir -p "${MACOS}"
 swiftc \
     -O \
     -whole-module-optimization \
+    ${GLASS_FLAGS} \
     Sources/*.swift \
     -o "${MACOS}/${APP_NAME}" \
     -framework Cocoa \
@@ -35,8 +47,10 @@ swiftc \
     -framework UserNotifications \
     -framework ServiceManagement
 
-# Copy main Info.plist
+# Copy main Info.plist and app icon
 cp Info.plist "${CONTENTS}/Info.plist"
+mkdir -p "${CONTENTS}/Resources"
+cp AppIcon.icns "${CONTENTS}/Resources/AppIcon.icns"
 
 echo "==> Main app built"
 

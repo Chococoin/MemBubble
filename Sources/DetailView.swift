@@ -282,8 +282,11 @@ struct DetailView: View {
                 )
             }
         }
-        .padding(12)
-        .frame(width: 300)
+        .padding(14)
+        .frame(width: 320)
+        #if LIQUID_GLASS
+        .modifier(DetailPanelBackground(pColor: pColor))
+        #else
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.ultraThinMaterial)
@@ -294,6 +297,7 @@ struct DetailView: View {
                 .stroke(pColor.opacity(0.4), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.5), radius: 16, x: 0, y: 8)
+        #endif
     }
 
     func statRow(_ label: String, _ value: String) -> some View {

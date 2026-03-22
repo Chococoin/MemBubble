@@ -15,9 +15,36 @@ struct CPUBubbleView: View {
     var fillRatio: CGFloat { max(0.15, min(info.totalUsage / 100, 1.0)) }
 
     var body: some View {
+        #if LIQUID_GLASS
+        if #available(macOS 26, *) {
+            glassBubbleBody
+        } else {
+            legacyBubbleBody
+        }
+        #else
+        legacyBubbleBody
+        #endif
+    }
+
+    // MARK: - Liquid Glass (macOS 26+)
+
+    #if LIQUID_GLASS
+    @available(macOS 26, *)
+    private var glassBubbleBody: some View {
+        GlassBubbleView(tintColor: cpuColor, fillRatio: fillRatio) {
+            Text(String(format: "%.0f%%", info.totalUsage))
+                .font(.system(size: 7, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+        }
+    }
+    #endif
+
+    // MARK: - Legacy Pearl (macOS 13-15)
+
+    private var legacyBubbleBody: some View {
         let s: CGFloat = 28
 
-        ZStack {
+        return ZStack {
             // Pearl body
             Circle()
                 .fill(

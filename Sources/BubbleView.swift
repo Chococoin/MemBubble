@@ -11,9 +11,41 @@ struct BubbleView: View {
     var fillRatio: CGFloat { max(0.15, info.pressure / 100) }
 
     var body: some View {
+        #if LIQUID_GLASS
+        if #available(macOS 26, *) {
+            glassBubbleBody
+                .scaleEffect(pulseScale > 1.0 ? pulseScale * 0.98 : 1.0)
+                .offset(x: shakeOffset)
+                .onChange(of: PressureLevel.from(pressure: info.pressure)) { oldLevel, newLevel in
+                    handleLevelChange(old: oldLevel, new: newLevel)
+                }
+        } else {
+            legacyBubbleBody
+        }
+        #else
+        legacyBubbleBody
+        #endif
+    }
+
+    // MARK: - Liquid Glass (macOS 26+)
+
+    #if LIQUID_GLASS
+    @available(macOS 26, *)
+    private var glassBubbleBody: some View {
+        GlassBubbleView(tintColor: pColor, fillRatio: fillRatio) {
+            Text(String(format: "%.0f%%", info.pressure))
+                .font(.system(size: 7, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+        }
+    }
+    #endif
+
+    // MARK: - Legacy Pearl (macOS 13-15)
+
+    private var legacyBubbleBody: some View {
         let s: CGFloat = 28
 
-        ZStack {
+        return ZStack {
             // 1. Deep pearl body — dark core with radial depth
             Circle()
                 .fill(
@@ -191,19 +223,22 @@ struct BubbleView: View {
         .scaleEffect(pulseScale > 1.0 ? pulseScale * 0.98 : 1.0)
         .offset(x: shakeOffset)
         .onChange(of: PressureLevel.from(pressure: info.pressure)) { oldLevel, newLevel in
-            if newLevel > oldLevel {
-                // Pulse animation on escalation
-                withAnimation(.easeInOut(duration: 0.3).repeatCount(2, autoreverses: true)) {
-                    pulseScale = 1.15
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    pulseScale = 1.0
-                }
+            handleLevelChange(old: oldLevel, new: newLevel)
+        }
+    }
 
-                // Shake on entering red zone
-                if newLevel == .red {
-                    triggerShake()
-                }
+    // MARK: - Shared Animation Logic
+
+    private func handleLevelChange(old: PressureLevel, new: PressureLevel) {
+        if new > old {
+            withAnimation(.easeInOut(duration: 0.3).repeatCount(2, autoreverses: true)) {
+                pulseScale = 1.15
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                pulseScale = 1.0
+            }
+            if new == .red {
+                triggerShake()
             }
         }
     }

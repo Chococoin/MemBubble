@@ -48,7 +48,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Hide dock icon
+        // Accessory mode: floats on all spaces, no dock icon at runtime
+        // App icon is visible in Finder/Applications via CFBundleIconFile
         NSApp.setActivationPolicy(.accessory)
 
         // Request notification permission
@@ -163,6 +164,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 usedMemory: self.memoryReader.info.used,
                 totalMemory: self.memoryReader.info.total
             )
+        }
+
+        // Force glass to re-sample background when switching spaces
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            // Nudge the window to force the glass effect to re-render
+            let frame = self.window.frame
+            self.window.setFrame(frame.offsetBy(dx: 0, dy: 1), display: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.window.setFrame(frame, display: true)
+            }
         }
 
         window.orderFrontRegardless()

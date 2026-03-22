@@ -11,7 +11,7 @@ struct ContentView: View {
     @State private var showContent = true  // controls fade in/out
 
     var body: some View {
-        Group {
+        let content = Group {
             if expanded {
                 DetailView(
                     info: memoryReader.info,
@@ -29,6 +29,18 @@ struct ContentView: View {
                     .onTapGesture { expand() }
             }
         }
+
+        #if LIQUID_GLASS
+        if #available(macOS 26, *) {
+            GlassEffectContainer {
+                content
+            }
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
     }
 
     private func expand() {
