@@ -13,6 +13,9 @@ class MemoryReader: ObservableObject {
     private(set) var baselineUsed: UInt64 = 0
     private var previousCPUTimes: [Int32: Double] = [:]  // pid -> total CPU seconds
     private var previousSampleTime: Date = Date()
+    private var previousPageouts: UInt64 = 0
+    private var previousSwapouts: UInt64 = 0
+    private var swapIORate: Double = 0  // swap page operations per second
 
     init() {
         // Capture raw memory first to establish baseline
@@ -51,61 +54,74 @@ class MemoryReader: ObservableObject {
     }
 
     private func recalculatePressure() {
-        // Pressure should reflect REAL danger, not just memory usage.
-        // macOS keeps RAM full by design (inactive pages, caches). That's normal.
-        // Real danger = kernel pressure level + heavy swap + high compression.
+        // Pressure reflects PERCEIVED SLOWNESS, not kernel alarm levels.
+        // Apple Silicon handles memory pressure gracefully — compressor is fast,
+        // SSD swap is ~7 GB/s. The user doesn't feel it until the system is
+        // actively thrashing (high swap I/O rate).
+        //
+        // Design principle: at 80%, the user should START feeling slowness.
+        // Red (85+) means "close apps now, you will notice lag."
         //
         // Levels:
-        //   Green  (0-49):  Normal operation, system healthy
-        //   Yellow (50-69): Elevated, some swap or compression
-        //   Orange (70-84): High, significant swap or kernel warning
-        //   Red    (85+):   Critical, system struggling, close apps now
+        //   Green  (0-39):  Healthy, Apple Silicon handling everything
+        //   Yellow (40-64): Memory is tight but performance is fine
+        //   Orange (65-79): Starting to strain, consider closing apps
+        //   Red    (80+):   Thrashing — user will feel real slowness
+
+        // -- Calculate swap I/O rate (thrashing indicator) --
+        let elapsed = Date().timeIntervalSince(previousSampleTime)
+        if elapsed > 0 && previousPageouts > 0 {
+            let deltaPageouts = info.pageouts > previousPageouts ? info.pageouts - previousPageouts : 0
+            let deltaSwapouts = info.swapouts > previousSwapouts ? info.swapouts - previousSwapouts : 0
+            let newRate = Double(deltaPageouts + deltaSwapouts) / elapsed
+            // Smooth the rate to avoid spikes
+            swapIORate = swapIORate * 0.6 + newRate * 0.4
+        }
+        previousPageouts = info.pageouts
+        previousSwapouts = info.swapouts
 
         var pressure: Double = 0
 
-        // 1. Kernel pressure level — the most authoritative signal from macOS itself
-        //    This is what the OS uses internally to decide when to kill apps
-        switch info.kernelPressureLevel {
-        case 0: pressure = 10   // normal — base level, everything fine
-        case 1: pressure = 45   // warn — system noticed pressure
-        case 2: pressure = 75   // critical — system actively reclaiming
-        case 4: pressure = 90   // urgent — system about to kill processes
-        default: pressure = 10
+        // 1. Swap I/O rate — THE primary indicator of perceived slowness
+        //    This measures active thrashing, not just that swap exists.
+        //    On Apple Silicon, < 50 ops/s is imperceptible, > 500 is painful.
+        if swapIORate > 1000 {
+            pressure = 75           // severe thrashing
+        } else if swapIORate > 500 {
+            pressure = 55           // heavy I/O, starting to feel it
+        } else if swapIORate > 100 {
+            pressure = 35           // moderate, system working but OK
+        } else if swapIORate > 20 {
+            pressure = 18           // light swap activity, normal
+        } else {
+            pressure = 5            // quiet, everything fine
         }
 
-        // 2. Swap usage — real indicator of memory exhaustion
-        //    Small swap (< 200MB) is normal on macOS, don't panic
-        //    Heavy swap (> 1GB) means RAM is genuinely full
-        if info.total > 0 && info.swapUsed > 0 {
-            let swapMB = Double(info.swapUsed) / 1_048_576
-            if swapMB > 2000 {
-                pressure += 25      // > 2GB swap: serious
-            } else if swapMB > 1000 {
-                pressure += 15      // > 1GB swap: elevated
-            } else if swapMB > 200 {
-                pressure += 8       // > 200MB swap: mild
-            }
-            // < 200MB swap: normal, no boost
+        // 2. Swap volume — large accumulated swap means more potential thrashing
+        let swapGB = Double(info.swapUsed) / 1_073_741_824
+        if swapGB > 4 {
+            pressure += 20          // > 4GB: system is deep in swap
+        } else if swapGB > 2 {
+            pressure += 10          // > 2GB: significant swap
+        } else if swapGB > 0.5 {
+            pressure += 3           // > 500MB: mild, normal on macOS
         }
 
-        // 3. Compressed memory ratio — high compression means CPU is working hard
-        //    to keep things in RAM. > 30% is notable, > 40% is heavy
-        if info.compressedRatio > 0.40 {
-            pressure += 12
-        } else if info.compressedRatio > 0.30 {
-            pressure += 5
-        }
-
-        // 4. Available memory (free + inactive) — if truly near zero, boost
-        //    Inactive can be reclaimed instantly, so free+inactive is what matters
+        // 3. Reclaimable memory — if near zero, any new allocation triggers swap
         let reclaimable = info.free + info.inactive
         if info.total > 0 {
             let reclaimableRatio = Double(reclaimable) / Double(info.total)
-            if reclaimableRatio < 0.05 {
-                pressure += 15   // < 5% reclaimable: dangerous
-            } else if reclaimableRatio < 0.10 {
-                pressure += 5    // < 10% reclaimable: getting tight
+            if reclaimableRatio < 0.03 {
+                pressure += 15      // < 3%: extremely tight
+            } else if reclaimableRatio < 0.08 {
+                pressure += 6       // < 8%: getting tight
             }
+        }
+
+        // 4. Kernel level — only boost for urgent (level 4, about to kill apps)
+        //    Levels 1-2 are too sensitive on Apple Silicon, ignore them
+        if info.kernelPressureLevel >= 4 {
+            pressure += 15          // kernel about to OOM-kill
         }
 
         info.pressure = min(pressure, 100)
@@ -152,6 +168,8 @@ class MemoryReader: ObservableObject {
             info.compressed = UInt64(vmStats.compressor_page_count) * pageSize
             info.used = info.total - info.free
             info.appMemory = info.active + info.inactive - UInt64(vmStats.purgeable_count) * pageSize
+            info.pageouts = UInt64(vmStats.pageouts)
+            info.swapouts = UInt64(vmStats.swapouts)
         }
 
         // Swap usage

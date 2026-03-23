@@ -16,6 +16,8 @@ struct MemoryInfo {
     var swapTotal: UInt64 = 0
     var kernelPressureLevel: Int = 0   // 0=normal, 1=warn, 2=critical, 4=urgent
     var compressedRatio: Double = 0    // compressed / total
+    var pageouts: UInt64 = 0           // cumulative pageouts since boot
+    var swapouts: UInt64 = 0           // cumulative swapouts since boot
 }
 
 struct ProcessMemInfo: Identifiable {
