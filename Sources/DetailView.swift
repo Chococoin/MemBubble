@@ -1,72 +1,11 @@
 import SwiftUI
 
-// MARK: - Sparkline Chart
-
-struct SparklineView: View {
-    let samples: [Double]
-    let peakPressure: Double
-    let color: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            if samples.count >= 2 {
-                let maxVal = max(peakPressure, 100)
-                let w = geo.size.width
-                let h = geo.size.height
-
-                // Filled area
-                Path { path in
-                    path.move(to: CGPoint(x: 0, y: h))
-                    for (i, sample) in samples.enumerated() {
-                        let x = w * CGFloat(i) / CGFloat(samples.count - 1)
-                        let y = h - (h * CGFloat(sample / maxVal))
-                        if i == 0 {
-                            path.addLine(to: CGPoint(x: x, y: y))
-                        } else {
-                            path.addLine(to: CGPoint(x: x, y: y))
-                        }
-                    }
-                    path.addLine(to: CGPoint(x: w, y: h))
-                    path.closeSubpath()
-                }
-                .fill(
-                    LinearGradient(
-                        colors: [color.opacity(0.3), color.opacity(0.05)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-
-                // Line
-                Path { path in
-                    for (i, sample) in samples.enumerated() {
-                        let x = w * CGFloat(i) / CGFloat(samples.count - 1)
-                        let y = h - (h * CGFloat(sample / maxVal))
-                        if i == 0 {
-                            path.move(to: CGPoint(x: x, y: y))
-                        } else {
-                            path.addLine(to: CGPoint(x: x, y: y))
-                        }
-                    }
-                }
-                .stroke(color, lineWidth: 1.5)
-            } else {
-                Text("Collecting data...")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.3))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
-}
-
 // MARK: - Expanded Detail View
 
 struct DetailView: View {
     let info: MemoryInfo
     let diskInfo: DiskInfo
     let processes: [ProcessMemInfo]
-    let session: WorkSession
     let activity: Double
     let cpuInfo: CPUInfo?
     let onClose: () -> Void
@@ -83,12 +22,6 @@ struct DetailView: View {
                     .foregroundColor(.white)
                 Spacer()
 
-                if session.peakPressure > 0 {
-                    Text(String(format: "Peak: %.0f%%", session.peakPressure))
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.5))
-                }
-
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.white.opacity(0.6))
@@ -98,23 +31,6 @@ struct DetailView: View {
             }
 
             Divider().background(Color.white.opacity(0.2))
-
-            // Sparkline
-            if !session.samples.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("PRESSURE (10 MIN)")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.4))
-
-                    SparklineView(
-                        samples: session.samples,
-                        peakPressure: session.peakPressure,
-                        color: pColor
-                    )
-                    .frame(height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                }
-            }
 
             // System memory bar
             VStack(alignment: .leading, spacing: 4) {
@@ -238,26 +154,6 @@ struct DetailView: View {
                         Label("\(formatBytes(diskInfo.freeBytes)) free", systemImage: "circle.fill")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.white.opacity(0.4))
-                    }
-                }
-            }
-
-            Divider().background(Color.white.opacity(0.2))
-
-            // Session summary
-            VStack(alignment: .leading, spacing: 4) {
-                Text("SESSION")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.4))
-
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        statRow("Duration:", session.durationFormatted)
-                        statRow("Snapshots:", "\(session.snapshotCount)")
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        statRow("Peak CPU:", String(format: "%.0f%%", session.peakCPU))
-                        statRow("Peak RAM:", formatBytes(session.peakMemoryUsed))
                     }
                 }
             }

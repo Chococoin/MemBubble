@@ -45,38 +45,6 @@ struct CPUInfo {
     var totalUsage: Double = 0   // user + system as percentage
 }
 
-// MARK: - Snapshot (for export)
-
-struct Snapshot: Codable {
-    let timestamp: Date
-    let memoryPressure: Double
-    let memoryUsed: UInt64
-    let memoryTotal: UInt64
-    let cpuUsage: Double
-    let diskUsed: UInt64
-    let diskTotal: UInt64
-    let topProcesses: [ProcessSnapshot]
-}
-
-struct ProcessSnapshot: Codable {
-    let pid: Int32
-    let name: String
-    let memory: UInt64
-    let cpuPercent: Double
-}
-
-struct SessionRecord: Codable {
-    let id: String
-    let startTime: Date
-    let endTime: Date
-    let duration: TimeInterval
-    let snapshotCount: Int
-    let peakPressure: Double
-    let peakCPU: Double
-    let peakMemoryUsed: UInt64
-    let snapshots: [Snapshot]
-}
-
 // MARK: - Display Mode
 
 enum DisplayMode: Int {

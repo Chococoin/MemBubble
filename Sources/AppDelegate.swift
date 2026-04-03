@@ -44,7 +44,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let memoryReader = MemoryReader()
     let cpuReader = CPUReader()
-    let session = WorkSession()
     let settings = SettingsManager.shared
     var menuBarController: MenuBarController!
 
@@ -54,9 +53,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Request notification permission
         NotificationManager.shared.requestPermission()
-
-        // Start recording snapshots for session export
-        SessionExporter.shared.startRecording(memoryReader: memoryReader, cpuReader: cpuReader)
 
         // Setup menu bar
         menuBarController = MenuBarController(memoryReader: memoryReader, cpuReader: cpuReader)
@@ -78,7 +74,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let contentView = ContentView(
             memoryReader: memoryReader,
             cpuReader: cpuReader,
-            session: session,
             settings: settings
         )
 
@@ -155,14 +150,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self.settings.saveWindowAnchor(self.anchorPoint, quadrant: self.anchorQuadrant)
         }
 
-        // Timer to record pressure history, send notifications, update menu bar
+        // Timer to send notifications, update menu bar, write widget data
         Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            self.session.record(
-                pressure: self.memoryReader.info.pressure,
-                cpuUsage: self.cpuReader.info.totalUsage,
-                memoryUsed: self.memoryReader.info.used
-            )
             NotificationManager.shared.checkPressureAndNotify(self.memoryReader.info.pressure)
             self.menuBarController.update()
 
@@ -252,19 +242,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = UserDefaults.standard.bool(forKey: SettingsKey.launchAtLogin) ? .on : .off
         menu.addItem(loginItem)
 
-        menu.addItem(NSMenuItem.separator())
-
-        // Export submenu
-        let exportMenu = NSMenu()
-        exportMenu.addItem(NSMenuItem(title: "Export All (JSON + CSV + HTML)", action: #selector(exportAll), keyEquivalent: ""))
-        exportMenu.addItem(NSMenuItem.separator())
-        exportMenu.addItem(NSMenuItem(title: "Export JSON", action: #selector(exportJSON), keyEquivalent: ""))
-        exportMenu.addItem(NSMenuItem(title: "Export CSV", action: #selector(exportCSV), keyEquivalent: ""))
-        exportMenu.addItem(NSMenuItem(title: "Export HTML Report", action: #selector(exportHTML), keyEquivalent: ""))
-        let exportSubmenu = NSMenuItem(title: "Export Session", action: nil, keyEquivalent: "")
-        exportSubmenu.submenu = exportMenu
-        menu.addItem(exportSubmenu)
-        menu.addItem(NSMenuItem(title: "Open Sessions Folder", action: #selector(openSessionsFolder), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Thresholds...", action: #selector(showThresholds), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ""))
@@ -356,37 +333,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc func exportAll() {
-        if let url = SessionExporter.shared.exportAll(session: session) {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    @objc func exportJSON() {
-        if let url = SessionExporter.shared.exportJSON(session: session) {
-            NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
-        }
-    }
-
-    @objc func exportCSV() {
-        if let url = SessionExporter.shared.exportCSV(session: session) {
-            NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
-        }
-    }
-
-    @objc func exportHTML() {
-        if let url = SessionExporter.shared.exportHTML(session: session) {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    @objc func openSessionsFolder() {
-        NSWorkspace.shared.open(SessionExporter.shared.sessionsDirectory)
-    }
-
     @objc func quitApp() {
-        // Auto-export session in all formats on quit
-        _ = SessionExporter.shared.exportAll(session: session)
         NSApplication.shared.terminate(nil)
     }
 }

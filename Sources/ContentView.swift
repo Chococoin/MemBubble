@@ -5,7 +5,6 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var memoryReader: MemoryReader
     @ObservedObject var cpuReader: CPUReader
-    @ObservedObject var session: WorkSession
     @ObservedObject var settings: SettingsManager
     @State private var expanded = false
     @State private var showContent = true  // controls fade in/out
@@ -17,7 +16,6 @@ struct ContentView: View {
                     info: memoryReader.info,
                     diskInfo: memoryReader.diskInfo,
                     processes: memoryReader.topProcesses,
-                    session: session,
                     activity: memoryReader.activity,
                     cpuInfo: settings.displayMode != .memoryOnly ? cpuReader.info : nil,
                     onClose: { collapse() }
