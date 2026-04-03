@@ -5,6 +5,7 @@ import Foundation
 enum SettingsKey {
     static let windowX = "windowPositionX"
     static let windowY = "windowPositionY"
+    static let windowQuadrant = "windowQuadrant"
     static let baselineUsed = "baselineUsed"
     static let hasBaseline = "hasBaseline"
     static let notificationsMuted = "notificationsMuted"
@@ -78,20 +79,22 @@ class SettingsManager: ObservableObject {
         self.processSortMode = ProcessSortMode(rawValue: defaults.integer(forKey: SettingsKey.processSortMode)) ?? .byMemory
     }
 
-    // MARK: - Window Position (stores top-right anchor point)
+    // MARK: - Window Position (stores anchor point + quadrant)
 
-    func saveWindowAnchor(_ topRight: NSPoint) {
+    func saveWindowAnchor(_ point: NSPoint, quadrant: AnchorQuadrant) {
         let defaults = UserDefaults.standard
-        defaults.set(Double(topRight.x), forKey: SettingsKey.windowX)
-        defaults.set(Double(topRight.y), forKey: SettingsKey.windowY)
+        defaults.set(Double(point.x), forKey: SettingsKey.windowX)
+        defaults.set(Double(point.y), forKey: SettingsKey.windowY)
+        defaults.set(quadrant.rawValue, forKey: SettingsKey.windowQuadrant)
     }
 
-    func loadWindowAnchor() -> NSPoint? {
+    func loadWindowAnchor() -> (point: NSPoint, quadrant: AnchorQuadrant)? {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: SettingsKey.windowX) != nil else { return nil }
         let x = defaults.double(forKey: SettingsKey.windowX)
         let y = defaults.double(forKey: SettingsKey.windowY)
-        return NSPoint(x: x, y: y)
+        let q = AnchorQuadrant(rawValue: defaults.integer(forKey: SettingsKey.windowQuadrant)) ?? .topRight
+        return (NSPoint(x: x, y: y), q)
     }
 
     // MARK: - Baseline

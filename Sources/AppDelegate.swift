@@ -39,7 +39,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var window: FloatingWindow!
     var settingsWindow: NSWindow?
     var thresholdsWindow: NSWindow?
-    var topRightAnchor: NSPoint = .zero  // persisted anchor for expand direction
+    var anchorPoint: NSPoint = .zero      // the fixed corner when resizing
+    var anchorQuadrant: AnchorQuadrant = .topRight  // which corner is anchored
 
     let memoryReader = MemoryReader()
     let cpuReader = CPUReader()
@@ -106,18 +107,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Auto-resize window based on content
         window.contentView?.setFrameSize(window.contentView?.fittingSize ?? NSSize(width: 80, height: 80))
 
-        // Restore saved anchor (top-right) or default to top-right of screen
+        // Restore saved anchor + quadrant, or default to top-right of screen
         let bubbleSize = window.frame.size
-        if let anchor = settings.loadWindowAnchor() {
-            topRightAnchor = anchor
+        if let saved = settings.loadWindowAnchor() {
+            anchorPoint = saved.point
+            anchorQuadrant = saved.quadrant
         } else if let screen = NSScreen.main {
             let sf = screen.visibleFrame
-            topRightAnchor = NSPoint(x: sf.maxX - 10, y: sf.maxY - 10)
+            anchorPoint = NSPoint(x: sf.maxX - 10, y: sf.maxY - 10)
+            anchorQuadrant = .topRight
         }
-        window.setFrameOrigin(NSPoint(x: topRightAnchor.x - bubbleSize.width,
-                                       y: topRightAnchor.y - bubbleSize.height))
+        window.setFrameOrigin(anchorQuadrant.origin(for: anchorPoint, size: bubbleSize))
 
-        // Observe content size changes — keep top-right anchored
+        // Observe content size changes — keep anchored corner fixed
         NotificationCenter.default.addObserver(
             forName: NSView.frameDidChangeNotification,
             object: window.contentView,
@@ -125,26 +127,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             guard let self = self, let contentView = self.window.contentView else { return }
             let newSize = contentView.fittingSize
+            let origin = self.anchorQuadrant.origin(for: self.anchorPoint, size: newSize)
 
             self.window.setFrame(
-                NSRect(x: self.topRightAnchor.x - newSize.width,
-                       y: self.topRightAnchor.y - newSize.height,
-                       width: newSize.width,
-                       height: newSize.height),
+                NSRect(origin: origin, size: newSize),
                 display: true,
                 animate: true
             )
         }
 
-        // Observe window move (user dragging) to update anchor
+        // Observe window move (user dragging) to update anchor + quadrant
         NotificationCenter.default.addObserver(
             forName: NSWindow.didMoveNotification,
             object: window,
             queue: .main
         ) { [weak self] _ in
             guard let self = self else { return }
-            self.topRightAnchor = NSPoint(x: self.window.frame.maxX, y: self.window.frame.maxY)
-            self.settings.saveWindowAnchor(self.topRightAnchor)
+            let frame = self.window.frame
+            // Determine quadrant from window center relative to screen
+            if let screen = self.window.screen ?? NSScreen.main {
+                self.anchorQuadrant = AnchorQuadrant.from(
+                    windowCenter: NSPoint(x: frame.midX, y: frame.midY),
+                    screen: screen
+                )
+            }
+            self.anchorPoint = self.anchorQuadrant.anchorPoint(from: frame)
+            self.settings.saveWindowAnchor(self.anchorPoint, quadrant: self.anchorQuadrant)
         }
 
         // Timer to record pressure history, send notifications, update menu bar
