@@ -41,6 +41,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var thresholdsWindow: NSWindow?
     var anchorPoint: NSPoint = .zero      // the fixed corner when resizing
     var anchorQuadrant: AnchorQuadrant = .topRight  // which corner is anchored
+    var isProgrammaticMove = false        // suppresses drag-handler during setFrame
 
     let memoryReader = MemoryReader()
     let cpuReader = CPUReader()
@@ -112,7 +113,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             anchorPoint = NSPoint(x: sf.maxX - 10, y: sf.maxY - 10)
             anchorQuadrant = .topRight
         }
-        window.setFrameOrigin(anchorQuadrant.origin(for: anchorPoint, size: bubbleSize))
+        var bubbleOrigin = anchorQuadrant.origin(for: anchorPoint, size: bubbleSize)
+        // Clamp to visible frame so a bad saved anchor can't hide the bubble off-screen
+        if let screen = NSScreen.main {
+            let sf = screen.visibleFrame
+            let minX = sf.minX + 4
+            let maxX = sf.maxX - bubbleSize.width - 4
+            let minY = sf.minY + 4
+            let maxY = sf.maxY - bubbleSize.height - 4
+            if bubbleOrigin.x < minX || bubbleOrigin.x > maxX ||
+               bubbleOrigin.y < minY || bubbleOrigin.y > maxY {
+                bubbleOrigin = NSPoint(x: sf.maxX - bubbleSize.width - 10,
+                                       y: sf.maxY - bubbleSize.height - 10)
+                anchorQuadrant = .topRight
+                anchorPoint = NSPoint(x: sf.maxX - 10, y: sf.maxY - 10)
+                settings.saveWindowAnchor(anchorPoint, quadrant: anchorQuadrant)
+            }
+        }
+        window.setFrameOrigin(bubbleOrigin)
 
         // Observe content size changes — keep anchored corner fixed
         NotificationCenter.default.addObserver(
@@ -124,11 +142,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let newSize = contentView.fittingSize
             let origin = self.anchorQuadrant.origin(for: self.anchorPoint, size: newSize)
 
+            self.isProgrammaticMove = true
             self.window.setFrame(
                 NSRect(origin: origin, size: newSize),
                 display: true,
                 animate: true
             )
+            self.isProgrammaticMove = false
         }
 
         // Observe window move (user dragging) to update anchor + quadrant
@@ -137,7 +157,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            guard let self = self else { return }
+            guard let self = self, !self.isProgrammaticMove else { return }
             let frame = self.window.frame
             // Determine quadrant from window center relative to screen
             if let screen = self.window.screen ?? NSScreen.main {
