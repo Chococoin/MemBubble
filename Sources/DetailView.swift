@@ -120,6 +120,9 @@ struct DetailView: View {
 
             // Disk bar
             if diskInfo.totalBytes > 0 {
+                let usedRatio = CGFloat(diskInfo.usedBytes) / CGFloat(diskInfo.totalBytes)
+                let diskColor: Color = usedRatio > 0.9 ? .red : usedRatio > 0.75 ? .orange : .purple
+
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Disk")
@@ -136,9 +139,6 @@ struct DetailView: View {
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Color.white.opacity(0.15))
 
-                            let usedRatio = CGFloat(diskInfo.usedBytes) / CGFloat(diskInfo.totalBytes)
-                            let diskColor: Color = usedRatio > 0.9 ? .red : usedRatio > 0.75 ? .orange : .purple
-
                             Rectangle()
                                 .fill(diskColor.opacity(0.7))
                                 .frame(width: geo.size.width * usedRatio)
@@ -150,7 +150,7 @@ struct DetailView: View {
                     HStack(spacing: 12) {
                         Label("Used", systemImage: "circle.fill")
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundColor(.purple.opacity(0.8))
+                            .foregroundColor(diskColor.opacity(0.8))
                         Label("\(formatBytes(diskInfo.freeBytes)) free", systemImage: "circle.fill")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.white.opacity(0.4))
